@@ -1,160 +1,181 @@
 const User = require("../models/User");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const DoctorProfile = require("../models/DoctorProfile");
 const crypto = require("crypto");
 
+const asyncHandler = require("../utils/asyncHandler");
+const ApiError = require("../utils/ApiError");
+const generateToken = require("../utils/generateToken");
+
+
 // ================= REGISTER =================
-exports.registerUser = async (req, res) => {
-  try {
+exports.registerUser = asyncHandler(async (req, res) => {
+  console.log("REGISTER BODY:", req.body);
+  const { username, email, password } = req.body;
 
-    console.log("BODY RECEIVED:", req.body);
-
-    const { username, email, password, role } = req.body;
-
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: "All fields required" });
-    }
-
-    const existingUser = await User.findOne({ email });
-
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    await User.create({
-      username,
-      email,
-      password: hashedPassword,
-      role: role || "user"
-    });
-
-    // 🔥 IMPORTANT FIX
-    return res.status(201).json({
-      message: "User registered successfully"
-    });
-
-  } catch (error) {
-
-    console.error("REGISTER ERROR:", error);
-
-    return res.status(500).json({
-      message: "Server error"
-    });
+  if (!username || !email || !password) {
+    throw new ApiError("All fields are required", 400);
   }
-};
 
-
-
-// ================= LOGIN =================
-exports.loginUser = async (req, res) => {
-  try {
-
-    const { email, password } = req.body;
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-res.json({
-  token,
-  user: {
-    id: user._id,
-    username: user.username,
-    email: user.email,
-    role: user.role     // ✅ ADD THIS
+  if (password.length < 6) {
+    throw new ApiError("Password must be at least 6 characters", 400);
   }
+
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    throw new ApiError("User already exists", 400);
+  }
+
+  const user = await User.create({
+    username,
+    email,
+    password,
+    role: "user",
+  });
+
+  const token = generateToken(user);
+
+  res.status(201).json({
+    success: true,
+    message: "User registered successfully",
+  });
 });
 
 
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+// ================= LOGIN =================
+exports.loginUser = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    throw new ApiError("Email and password required", 400);
   }
-};
 
+  const user = await User.findOne({ email }).select("+password");
 
-// ================= HOSPITAL CREATE DOCTOR =================
-exports.createDoctor = async (req, res) => {
-  try {
-    const { username, email, specialization } = req.body;
-
-    const tempPassword = crypto.randomBytes(8).toString("hex");
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-    const doctorUser = await User.create({
-      username,
-      email,
-      password: hashedPassword,
-      role: "doctor",
-      hospitalId: req.user._id   // ✅ VERY IMPORTANT
-    });
-
-    await DoctorProfile.create({
-      userId: doctorUser._id,
-      hospitalName: req.user.username,
-      specialization
-    });
-
-    res.status(201).json({
-      message: "Doctor created",
-      resetPassword: `/set-password/${doctorUser._id}`
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  if (!user) {
+    throw new ApiError("Invalid credentials", 401);
   }
-};
 
+  const isMatch = await user.comparePassword(password);
+
+  if (!isMatch) {
+    throw new ApiError("Invalid credentials", 401);
+  }
+
+  const token = generateToken(user);
+
+  res.json({
+    success: true,
+    token,
+    user: {
+      id: user._id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+    },
+  });
+});
+
+
+// ================= CREATE DOCTOR =================
+exports.createDoctor = asyncHandler(async (req, res) => {
+  const { username, email, specialization } = req.body;
+
+  if (!username || !email || !specialization) {
+    throw new ApiError("All fields are required", 400);
+  }
+
+  const existing = await User.findOne({ email });
+  if (existing) {
+    throw new ApiError("Doctor already exists", 400);
+  }
+
+  const tempPassword = crypto.randomBytes(8).toString("hex");
+
+  const doctorUser = await User.create({
+    username,
+    email,
+    password: tempPassword,
+    role: "doctor",
+    hospitalId: req.user.id,
+  });
+
+  await DoctorProfile.create({
+    userId: doctorUser._id,
+    specialization,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: "Doctor created",
+    tempPassword, // ⚠️ send via email in real app
+  });
+});
+
+
+// ================= GET ME =================
+// FIX 1: Removed duplicate getMe — second definition was silently overwriting the first.
+// FIX 2: Return req.user directly (no { success, data } wrapper) so frontend
+//         can do `setProfile(pRes.data)` and get username/role/etc. directly.
+exports.getMe = asyncHandler(async (req, res) => {
+  res.json(req.user);
+});
 
 
 // ================= SET DOCTOR PASSWORD =================
-exports.setDoctorPassword = async (req, res) => {
-  try {
+exports.setDoctorPassword = asyncHandler(async (req, res) => {
+  const { password } = req.body;
 
-    const { password } = req.body;
-
-    const hashed = await bcrypt.hash(password, 10);
-
-    await User.findByIdAndUpdate(req.params.id, {
-      password: hashed
-    });
-
-    res.json({ message: "Password set successfully" });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  if (!password || password.length < 6) {
+    throw new ApiError("Password must be at least 6 characters", 400);
   }
-};
+
+  const user = await User.findById(req.params.id);
+
+  if (!user) {
+    throw new ApiError("User not found", 404);
+  }
+
+  user.password = password;
+  await user.save();
+
+  res.json({
+    success: true,
+    message: "Password set successfully",
+  });
+});
 
 
-// ================= LOGIN AS DOCTOR (HOSPITAL) =================
-exports.loginAsDoctor = async (req, res) => {
+// ================= LOGIN AS DOCTOR =================
+// FIX 3: Guard so only a hospital account can impersonate a doctor.
+//         Without this, any role (including the doctor themselves) could
+//         call this endpoint and overwrite their own token, causing the
+//         dashboard to flip and the doctors list to vanish.
+exports.loginAsDoctor = asyncHandler(async (req, res) => {
+  if (req.user.role !== "hospital") {
+    throw new ApiError("Only hospital accounts can impersonate a doctor", 403);
+  }
 
   const doctor = await User.findById(req.params.doctorId);
 
   if (!doctor || doctor.role !== "doctor") {
-    return res.status(404).json({ message: "Doctor not found" });
+    throw new ApiError("Doctor not found", 404);
   }
 
-  const token = jwt.sign(
-    { id: doctor._id },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+  // Confirm the doctor belongs to this hospital
+  if (String(doctor.hospitalId) !== String(req.user._id || req.user.id)) {
+    throw new ApiError("This doctor does not belong to your hospital", 403);
+  }
 
-  res.json({ token });
+  const token = generateToken(doctor);
 
-};
+  res.json({
+    success: true,
+    token,
+    user: {
+      id: doctor._id,
+      username: doctor.username,
+      email: doctor.email,
+      role: doctor.role,
+    },
+  });
+});

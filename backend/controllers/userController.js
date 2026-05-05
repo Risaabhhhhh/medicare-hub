@@ -35,11 +35,35 @@ exports.updateProfile = async (req, res) => {
 // ================= GET ALL DOCTORS =================
 exports.getDoctors = async (req, res) => {
   try {
+    console.log("LOGGED IN USER:", req.user); // 👈 ADD THIS
 
-    const doctors = await User.find({ role: "doctor" })
-      .select("username");
+    const doctors = await User.find({
+      role: "doctor",
+      hospitalId: req.user._id,
+    });
 
-    return res.json(doctors);
+    console.log("FOUND DOCTORS:", doctors); // 👈 ADD THIS
+
+    res.json(doctors);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch doctors" });
+  }
+};
+
+
+
+// ================= GET DOCTORS OF A HOSPITAL (BY ID) =================
+exports.getDoctorsByHospital = async (req, res) => {
+  try {
+    const doctors = await User.find({
+      role: "doctor",
+      hospitalId: req.params.hospitalId
+    }).select("_id username");
+
+    return res.json({
+      success: true,
+      data: doctors
+    });
 
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -47,37 +71,30 @@ exports.getDoctors = async (req, res) => {
 };
 
 
-// ================= GET DOCTORS OF A HOSPITAL (BY ID) =================
-exports.getDoctorsByHospital = async (req, res) => {
-
-  const doctors = await User.find({
-    role: "doctor",
-    hospitalId: req.params.hospitalId
-  }).select("username");
-
-  return res.json(doctors);
-};
-
-
 // ================= GET DOCTORS OF A HOSPITAL (BY NAME) =================
 exports.getDoctorsByHospitalName = async (req, res) => {
   try {
-
     const hospital = await User.findOne({
       username: req.params.name,
       role: "hospital"
     });
 
     if (!hospital) {
-      return res.json([]);
+      return res.json({
+        success: true,
+        data: []
+      });
     }
 
     const doctors = await User.find({
       role: "doctor",
       hospitalId: hospital._id
-    }).select("username");
+    }).select("_id username");
 
-    return res.json(doctors);
+    return res.json({
+      success: true,
+      data: doctors
+    });
 
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -89,8 +106,10 @@ exports.getDoctorsByHospitalName = async (req, res) => {
 exports.getHospitalByName = async (req, res) => {
   try {
 
+    const name = decodeURIComponent(req.params.name); // 🔥 FIX
+
     const hospital = await User.findOne({
-      username: req.params.name,
+      username: name,
       role: "hospital"
     });
 
@@ -98,9 +117,9 @@ exports.getHospitalByName = async (req, res) => {
       return res.status(404).json({ message: "Hospital not found" });
     }
 
-    return res.json(hospital);
+    res.json(hospital);
 
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 };

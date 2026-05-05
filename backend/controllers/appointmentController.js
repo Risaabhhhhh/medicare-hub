@@ -1,219 +1,206 @@
 const Appointment = require("../models/Appointment");
+const asyncHandler = require("../utils/asyncHandler");
+const ApiError = require("../utils/ApiError");
 
+// ================= BOOK APPOINTMENT =================
+exports.bookAppointment = asyncHandler(async (req, res) => {
+  const { doctor, date, time, hospital } = req.body;
 
-// ================= PATIENT BOOK APPOINTMENT =================
-exports.bookAppointment = async (req, res) => {
-  try {
+  // DEBUG (keep this for now)
+  console.log("BODY RECEIVED:", req.body);
 
-    const { doctor, date, time, hospitalId } = req.body;
-
-    if (!doctor || !date || !time || !hospitalId) {
-      return res.status(400).json({ message: "All fields required" });
-    }
-
-    const appointment = await Appointment.create({
-      patient: req.user._id,
-      doctor,
-      hospital: hospitalId,
-      date,
-      time,
-      status: "pending"
-    });
-
-    res.status(201).json(appointment);
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  if (!doctor || !date || !time || !hospital) {
+    throw new ApiError("All fields required", 400);
   }
-};
 
+  const appointment = await Appointment.create({
+    patient: req.user.id,
+    doctor,
+    hospital, // ✅ correct
+    date,
+    time,
+    status: "pending",
+  });
 
-// ================= USER VIEW OWN APPOINTMENTS =================
-exports.getUserAppointments = async (req, res) => {
-  try {
+  res.status(201).json({
+    success: true,
+    data: appointment,
+  });
+});
+// ================= USER APPOINTMENTS (PAGINATED) =================
+exports.getUserAppointments = asyncHandler(async (req, res) => {
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 10;
 
-    const appointments = await Appointment.find({
-      patient: req.user._id
-    })
-      .populate("doctor", "username")
-      .populate("hospital", "username")
-      .sort({ date: 1, time: 1 });
+  const skip = (page - 1) * limit;
 
-    res.json(appointments);
+  const appointments = await Appointment.find({
+    patient: req.user.id,
+  })
+    .populate("doctor", "username")
+    .populate("hospital", "username")
+    .sort({ date: 1, time: 1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
 
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  res.json({
+    success: true,
+    page,
+    results: appointments.length,
+    data: appointments,
+  });
+});
+
+// ================= DOCTOR / HOSPITAL VIEW =================
+exports.getDoctorAppointments = asyncHandler(async (req, res) => {
+  const { date, page = 1, limit = 10 } = req.query;
+
+  let filter = {};
+
+  if (req.user.role === "doctor") {
+    filter.doctor = req.user.id;
+  } else if (req.user.role === "hospital") {
+    filter.hospital = req.user.id;
+  } else {
+    throw new ApiError("Unauthorized role", 403);
   }
-};
 
+  if (date) filter.date = date;
 
-// ================= DOCTOR / HOSPITAL VIEW APPOINTMENTS =================
-exports.getDoctorAppointments = async (req, res) => {
-  try {
+  const skip = (page - 1) * limit;
 
-    const { date } = req.query;
+  const appointments = await Appointment.find(filter)
+    .populate("patient", "username email")
+    .populate("doctor", "username")
+    .populate("hospital", "username")
+    .sort({ date: 1, time: 1 })
+    .skip(skip)
+    .limit(Number(limit))
+    .lean();
 
-    let filter = {};
+  res.json({
+    success: true,
+    data: appointments,
+  });
+});
 
-    // Doctor sees only his appointments
-    if (req.user.role === "doctor") {
-      filter.doctor = req.user._id;
-    }
+// ================= APPROVE =================
+exports.approveAppointment = asyncHandler(async (req, res) => {
+  const appointment = await Appointment.findById(req.params.id);
 
-    // Hospital sees all under hospital
-    else if (req.user.role === "hospital") {
-      filter.hospital = req.user._id;
-    }
-
-    // Filter by selected date
-    if (date) {
-      filter.date = date;
-    }
-
-    const appointments = await Appointment.find(filter)
-      .populate("patient", "username email")
-      .populate("doctor", "username")
-      .populate("hospital", "username")
-      .sort({ doctor: 1, date: 1, time: 1 });
-
-    res.json(appointments);
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  if (!appointment) {
+    throw new ApiError("Appointment not found", 404);
   }
-};
 
-
-// ================= DOCTOR APPROVE =================
-exports.approveAppointment = async (req, res) => {
-  try {
-
-    const appointment = await Appointment.findById(req.params.id);
-
-    if (!appointment) {
-      return res.status(404).json({ message: "Appointment not found" });
-    }
-
-    // Count approved appointments for SAME doctor on SAME date
-    const count = await Appointment.countDocuments({
-      doctor: appointment.doctor,
-      date: appointment.date,
-      status: "approved"
-    });
-
-    const tokenNumber = `D-${count + 1}`;
-
-    appointment.status = "approved";
-    appointment.tokenNumber = tokenNumber;
-
-    await appointment.save();
-
-    res.json({
-      message: "Appointment approved",
-      tokenNumber
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  // 🔐 SECURITY CHECK
+  if (req.user.role === "doctor" && appointment.doctor.toString() !== req.user.id) {
+    throw new ApiError("Not authorized", 403);
   }
-};
 
+  if (req.user.role === "hospital" && appointment.hospital.toString() !== req.user.id) {
+    throw new ApiError("Not authorized", 403);
+  }
+
+  // ⚠️ still basic (can upgrade with transactions later)
+  const count = await Appointment.countDocuments({
+    doctor: appointment.doctor,
+    date: appointment.date,
+    status: "approved",
+  });
+
+  appointment.status = "approved";
+  appointment.tokenNumber = `D-${count + 1}`;
+
+  await appointment.save();
+
+  res.json({
+    success: true,
+    tokenNumber: appointment.tokenNumber,
+  });
+});
 
 // ================= UPLOAD REPORT =================
-exports.uploadReport = async (req, res) => {
-  try {
+exports.uploadReport = asyncHandler(async (req, res) => {
+  const appointment = await Appointment.findById(req.params.id);
 
-    const appointment = await Appointment.findById(req.params.id);
-
-    if (!appointment) {
-      return res.status(404).json({ message: "Appointment not found" });
-    }
-
-    appointment.reportUrl = req.body.reportUrl;
-
-    await appointment.save();
-
-    res.json({ message: "Report uploaded" });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  if (!appointment) {
+    throw new ApiError("Appointment not found", 404);
   }
-};
 
-// ================= UPDATE STATUS (HOSPITAL) =================
-exports.updateAppointmentStatus = async (req, res) => {
-  try {
+  appointment.reportUrl = req.body.reportUrl;
 
-    const { status } = req.body;
+  await appointment.save();
 
-    const appointment = await Appointment.findById(req.params.id);
+  res.json({
+    success: true,
+    message: "Report uploaded",
+  });
+});
 
-    if (!appointment) {
-      return res.status(404).json({ message: "Appointment not found" });
-    }
+// ================= UPDATE STATUS =================
+exports.updateAppointmentStatus = asyncHandler(async (req, res) => {
+  const { status } = req.body;
 
-    appointment.status = status;
-    await appointment.save();
+  const appointment = await Appointment.findById(req.params.id);
 
-    res.json({ message: "Status updated" });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  if (!appointment) {
+    throw new ApiError("Appointment not found", 404);
   }
-};
 
-// ================= HOSPITAL CREATE OFFLINE TOKEN =================
-exports.createOfflineAppointment = async (req, res) => {
-  try {
+  appointment.status = status;
+  await appointment.save();
 
-    const { doctor, date } = req.body;
+  res.json({
+    success: true,
+    message: "Status updated",
+  });
+});
 
-    if (!doctor || !date) {
-      return res.status(400).json({ message: "Doctor and date required" });
-    }
+// ================= OFFLINE APPOINTMENT =================
+exports.createOfflineAppointment = asyncHandler(async (req, res) => {
+  const { doctor, date } = req.body;
 
-    const count = await Appointment.countDocuments({
-      doctor,
-      date,
-      status: "approved"
-    });
-
-    const tokenNumber = `D-${count + 1}`;
-
-    const appointment = await Appointment.create({
-      patient: null,
-      doctor,
-      hospital: req.user._id,
-      date,
-      time: "Walk-in",
-      status: "approved",
-      tokenNumber
-    });
-
-    res.status(201).json(appointment);
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  if (!doctor || !date) {
+    throw new ApiError("Doctor and date required", 400);
   }
-};
 
-// ================= GET TODAY QUEUE =================
-exports.getTodayQueue = async (req, res) => {
-  try {
+  const count = await Appointment.countDocuments({
+    doctor,
+    date,
+    status: "approved",
+  });
 
-    const { doctorId, date } = req.query;
+  const appointment = await Appointment.create({
+    patient: null,
+    doctor,
+    hospital: req.user.id,
+    date,
+    time: "Walk-in",
+    status: "approved",
+    tokenNumber: `D-${count + 1}`,
+  });
 
-    const appointments = await Appointment.find({
-      doctor: doctorId,
-      date,
-      status: { $in: ["approved", "in-progress"] }
-    })
-      .sort({ time: 1 });
+  res.status(201).json({
+    success: true,
+    data: appointment,
+  });
+});
 
-    res.json(appointments);
+// ================= TODAY QUEUE =================
+exports.getTodayQueue = asyncHandler(async (req, res) => {
+  const { doctorId, date } = req.query;
 
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+  const appointments = await Appointment.find({
+    doctor: doctorId,
+    date,
+    status: { $in: ["approved", "in-progress"] },
+  })
+    .sort({ time: 1 })
+    .lean();
 
+  res.json({
+    success: true,
+    data: appointments,
+  });
+});
