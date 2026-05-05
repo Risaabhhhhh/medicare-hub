@@ -2,63 +2,93 @@ const express = require("express");
 const router = express.Router();
 
 const protect = require("../middleware/authMiddleware");
-const roleCheck = require("../middleware/roleMiddleware");
-const { uploadReport } = require("../controllers/appointmentController");
-const { updateAppointmentStatus } = require("../controllers/appointmentController");
-const { createOfflineAppointment } = require("../controllers/appointmentController");
-const { getTodayQueue } = require("../controllers/appointmentController");
-
-
-
+const {
+  authorizeRoles,
+  authorizePermissions,
+} = require("../middleware/roleMiddleware");
 
 const {
   bookAppointment,
   getDoctorAppointments,
   approveAppointment,
-  getUserAppointments
+  getUserAppointments,
+  uploadReport,
+  updateAppointmentStatus,
+  createOfflineAppointment,
+  getTodayQueue,
 } = require("../controllers/appointmentController");
 
-// Patient books
-router.post("/", protect, roleCheck("user"), bookAppointment);
 
-// User views own
-router.get("/user", protect, roleCheck("user"), getUserAppointments);
+// ================= PATIENT =================
 
-router.get("/queue/today", protect, getTodayQueue);
+// Book appointment
+router.post(
+  "/",
+  protect,
+  authorizeRoles("user"),
+  bookAppointment
+);
 
-// Doctor or Hospital views
-router.get("/doctor", protect, getDoctorAppointments);
+// View own appointments
+router.get(
+  "/user",
+  protect,
+  authorizeRoles("user"),
+  getUserAppointments
+);
 
-// Doctor approves
+
+// ================= COMMON =================
+
+// Get today's queue
+router.get(
+  "/queue/today",
+  protect,
+  getTodayQueue
+);
+
+
+// ================= DOCTOR / HOSPITAL =================
+
+// View appointments
+router.get(
+  "/doctor",
+  protect,
+  authorizeRoles("doctor", "hospital"),
+  getDoctorAppointments
+);
+
+// Approve appointment
 router.put(
   "/approve/:id",
   protect,
-  roleCheck("doctor", "hospital"),
+  authorizeRoles("doctor", "hospital"),
   approveAppointment
 );
 
+// Update status (hospital only)
 router.put(
   "/status/:id",
   protect,
-  roleCheck("hospital"),
+  authorizeRoles("hospital"),
   updateAppointmentStatus
 );
 
+// Create offline appointment (hospital only)
 router.post(
   "/offline",
   protect,
-  roleCheck("hospital"),
+  authorizeRoles("hospital"),
   createOfflineAppointment
 );
 
-
+// Upload report (doctor only)
 router.put(
   "/upload-report/:id",
   protect,
-  roleCheck("doctor"),
+  authorizeRoles("doctor"),
   uploadReport
 );
-
 
 
 module.exports = router;

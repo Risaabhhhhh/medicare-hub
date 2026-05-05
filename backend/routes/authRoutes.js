@@ -6,18 +6,45 @@ const {
   loginUser,
   createDoctor,
   setDoctorPassword,
-  loginAsDoctor
+  loginAsDoctor,
+  getMe // ✅ ADD
 } = require("../controllers/authController");
 
 const protect = require("../middleware/authMiddleware");
+const {
+  authorizeRoles,
+} = require("../middleware/roleMiddleware");
 
-// ================= AUTH =================
+// ================= PUBLIC ROUTES =================
+
+// Register user
 router.post("/register", registerUser);
+
+// Login user
 router.post("/login", loginUser);
 
-// ================= HOSPITAL ACTIONS =================
-router.post("/create-doctor", protect, createDoctor);
+// ================= GET CURRENT USER =================
+router.get("/me", protect, getMe); // ✅ ADD
+
+// ================= DOCTOR PASSWORD SET =================
 router.post("/set-password/:id", setDoctorPassword);
-router.post("/login-as-doctor/:doctorId", protect, loginAsDoctor);
+
+// ================= HOSPITAL ROUTES =================
+
+// Create doctor (ONLY hospital)
+router.post(
+  "/create-doctor",
+  protect,
+  authorizeRoles("hospital"),
+  createDoctor
+);
+
+// Login as doctor (hospital impersonation)
+router.post(
+  "/login-doctor/:doctorId",
+  protect,
+  authorizeRoles("hospital"),
+  loginAsDoctor
+);
 
 module.exports = router;

@@ -2,17 +2,47 @@ const express = require("express");
 const router = express.Router();
 
 const protect = require("../middleware/authMiddleware");
-const roleCheck = require("../middleware/roleMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 
-// ✅ CORRECT CONTROLLER FILE
-const { createDoctor } = require("../controllers/hospitalController");
+const {
+  createDoctor,
+  getHospitalDoctors,
+  loginAsDoctor,
+  deleteDoctor,
+} = require("../controllers/hospitalController");
 
-// Hospital creates doctor
+// ================= HOSPITAL =================
+
+// Create doctor
 router.post(
   "/create-doctor",
   protect,
-  roleCheck("hospital"),
+  authorizeRoles("hospital"),
   createDoctor
+);
+
+// Get all doctors of hospital
+router.get(
+  "/doctors",
+  protect,
+  authorizeRoles("hospital"),
+  getHospitalDoctors
+);
+
+// Login as doctor
+router.post(
+  "/login-doctor/:doctorId",
+  protect,
+  authorizeRoles("hospital"),
+  loginAsDoctor
+);
+
+// Delete doctor
+router.delete(
+  "/doctor/:doctorId",
+  protect,
+  authorizeRoles("hospital"),
+  deleteDoctor
 );
 
 module.exports = router;
