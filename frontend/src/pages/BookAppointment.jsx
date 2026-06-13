@@ -5,42 +5,46 @@ import { useSearchParams } from "react-router-dom";
 function BookAppointment() {
 
   const [searchParams] = useSearchParams();
+  const hospitalName = searchParams.get("hospitalName");
 
-  // Only for display
-  const hospitalFromMap = searchParams.get("hospitalName");
-
-  // REAL SOURCE OF TRUTH
-  const hospitalId = localStorage.getItem("userId");
-
+  const [hospitalId, setHospitalId] = useState("");
   const [doctors, setDoctors] = useState([]);
+
   const [doctor, setDoctor] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
+  
 
-  // ================= FETCH DOCTORS =================
   useEffect(() => {
-
-    const fetchDoctors = async () => {
+    const fetchData = async () => {
       try {
+        if (!hospitalName) return;
 
-        if (!hospitalId) return;
-
-        const res = await api.get(
-          `/users/doctors/${hospitalId}`
+        // 1️⃣ Get hospital
+        const hospitalRes = await api.get(
+          `/users/hospital/by-name/${encodeURIComponent(hospitalName)}`
         );
 
-        setDoctors(res.data);
+        const hospital = hospitalRes.data;
+        setHospitalId(hospital._id);
+
+        // 2️⃣ Get doctors
+        const doctorRes = await api.get(
+          `/users/doctors/${hospital._id}`
+        );
+
+        console.log("Doctors API:", doctorRes.data);
+
+        setDoctors(doctorRes.data.data || []); // ✅ FIX
 
       } catch (error) {
-        console.error(error.response?.data || error.message);
+        console.error("Fetch error:", error.response?.data || error.message);
       }
     };
 
-    fetchDoctors();
+    fetchData();
+  }, [hospitalName]);
 
-  }, [hospitalId]);
-
-  // ================= BOOK APPOINTMENT =================
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -50,15 +54,13 @@ function BookAppointment() {
     }
 
     try {
-
-      const res = await api.post("/appointments", {
+      await api.post("/appointments", {
         doctor,
-        hospitalId,
+        hospital: hospitalId,
         date,
         time
       });
 
-      console.log("Appointment:", res.data);
       alert("Appointment booked successfully!");
 
       setDoctor("");
@@ -73,19 +75,16 @@ function BookAppointment() {
 
   return (
     <div style={container}>
-
       <form style={form} onSubmit={handleSubmit}>
 
         <h2 style={title}>Book Appointment</h2>
 
-        {/* Hospital */}
         <input
           style={input}
-          value={hospitalFromMap || "Selected Hospital"}
+          value={hospitalName || "Selected Hospital"}
           readOnly
         />
 
-        {/* Doctor */}
         <select
           style={input}
           value={doctor}
@@ -93,7 +92,7 @@ function BookAppointment() {
         >
           <option value="">Select Doctor</option>
 
-          {doctors.map((d) => (
+          {Array.isArray(doctors) && doctors.map((d) => (
             <option key={d._id} value={d._id}>
               {d.username}
             </option>
@@ -101,7 +100,6 @@ function BookAppointment() {
 
         </select>
 
-        {/* Date */}
         <input
           style={input}
           type="date"
@@ -109,7 +107,6 @@ function BookAppointment() {
           onChange={(e) => setDate(e.target.value)}
         />
 
-        {/* Time */}
         <input
           style={input}
           type="time"
@@ -122,12 +119,9 @@ function BookAppointment() {
         </button>
 
       </form>
-
     </div>
   );
 }
-
-/* ================= STYLES ================= */
 
 const container = {
   minHeight: "100vh",
