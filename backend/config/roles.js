@@ -1,0 +1,38 @@
+const ROLES = {
+  ADMIN: "admin",
+  DOCTOR: "doctor",
+  USER: "user",
+};
+
+const PERMISSIONS = {
+  MANAGE_USERS: "manage_users",
+  VIEW_USERS: "view_users",
+  MANAGE_APPOINTMENTS: "manage_appointments",
+  VIEW_APPOINTMENTS: "view_appointments",
+  MANAGE_HOSPITAL: "manage_hospital",
+};
+
+const ROLE_PERMISSIONS = {
+  [ROLES.ADMIN]: [
+    PERMISSIONS.MANAGE_USERS,
+    PERMISSIONS.VIEW_USERS,
+    PERMISSIONS.MANAGE_APPOINTMENTS,
+    PERMISSIONS.VIEW_APPOINTMENTS,
+    PERMISSIONS.MANAGE_HOSPITAL,
+  ],
+
+  [ROLES.DOCTOR]: [
+    PERMISSIONS.VIEW_APPOINTMENTS,
+    PERMISSIONS.MANAGE_APPOINTMENTS,
+  ],
+
+  [ROLES.USER]: [
+    PERMISSIONS.VIEW_APPOINTMENTS,
+  ],
+};
+
+module.exports = {
+  ROLES,
+  PERMISSIONS,
+  ROLE_PERMISSIONS,
+};
