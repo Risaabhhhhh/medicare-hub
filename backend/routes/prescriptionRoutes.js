@@ -38,6 +38,13 @@ router.post("/", protect, async (req, res) => {
 // ✅ DELETE prescription
 router.delete("/:id", protect, async (req, res) => {
   try {
+    const prescription = await Prescription.findById(req.params.id);
+    if (!prescription) {
+      return res.status(404).json({ message: "Prescription not found" });
+    }
+    if (String(prescription.user) !== String(req.user._id) && String(prescription.user) !== String(req.user.id)) {
+      return res.status(403).json({ message: "Not authorized to delete this prescription" });
+    }
     await Prescription.findByIdAndDelete(req.params.id);
     res.json({ message: "Deleted successfully" });
   } catch (err) {

@@ -27,7 +27,7 @@ router.post("/login", loginUser);
 router.get("/me", protect, getMe); // ✅ ADD
 
 // ================= DOCTOR PASSWORD SET =================
-router.post("/set-password/:id", setDoctorPassword);
+router.post("/set-password/:id", protect, setDoctorPassword);
 
 // ================= HOSPITAL ROUTES =================
 

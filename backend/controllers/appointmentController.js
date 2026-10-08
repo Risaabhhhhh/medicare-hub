@@ -128,6 +128,10 @@ exports.uploadReport = asyncHandler(async (req, res) => {
     throw new ApiError("Appointment not found", 404);
   }
 
+  if (String(appointment.doctor) !== String(req.user.id) && String(appointment.doctor) !== String(req.user._id)) {
+    throw new ApiError("Not authorized to upload report for this appointment", 403);
+  }
+
   appointment.reportUrl = req.body.reportUrl;
 
   await appointment.save();
@@ -146,6 +150,10 @@ exports.updateAppointmentStatus = asyncHandler(async (req, res) => {
 
   if (!appointment) {
     throw new ApiError("Appointment not found", 404);
+  }
+
+  if (String(appointment.hospital) !== String(req.user.id) && String(appointment.hospital) !== String(req.user._id)) {
+    throw new ApiError("Not authorized to update this appointment", 403);
   }
 
   appointment.status = status;

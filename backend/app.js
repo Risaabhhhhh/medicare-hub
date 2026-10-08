@@ -3,8 +3,6 @@ const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const dotenv = require("dotenv");
-const vitalRoutes = require("./routes/vitalRoutes");
-const prescriptionRoutes = require("./routes/prescriptionRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 
 const errorMiddleware = require("./middleware/errorMiddleware");
@@ -45,8 +43,6 @@ app.use("/api/hospital", require("./routes/hospitalRoutes"));
 app.use("/api/hospital-impersonate", require("./routes/hospitalImpersonateRoutes"));
 app.use("/api/vitals", require("./routes/vitalRoutes"));
 app.use("/api/prescriptions", require("./routes/prescriptionRoutes"));
-app.use("/api/vitals", vitalRoutes);
-app.use("/api/prescriptions", prescriptionRoutes); 
 app.use("/api/ai", aiRoutes); 
 
 

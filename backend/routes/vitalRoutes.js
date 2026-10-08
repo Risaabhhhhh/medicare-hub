@@ -31,6 +31,13 @@ router.post("/", protect, async (req, res) => {
 // ✅ DELETE vital
 router.delete("/:id", protect, async (req, res) => {
   try {
+    const vital = await Vital.findById(req.params.id);
+    if (!vital) {
+      return res.status(404).json({ message: "Vital not found" });
+    }
+    if (String(vital.user) !== String(req.user._id) && String(vital.user) !== String(req.user.id)) {
+      return res.status(403).json({ message: "Not authorized to delete this vital" });
+    }
     await Vital.findByIdAndDelete(req.params.id);
     res.json({ message: "Deleted" });
   } catch (err) {

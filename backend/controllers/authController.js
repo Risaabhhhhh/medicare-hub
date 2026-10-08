@@ -135,6 +135,14 @@ exports.setDoctorPassword = asyncHandler(async (req, res) => {
     throw new ApiError("User not found", 404);
   }
 
+  if (req.user.role === "hospital") {
+    if (String(user.hospitalId) !== String(req.user.id)) {
+      throw new ApiError("Not authorized to change this doctor's password", 403);
+    }
+  } else if (String(req.user.id) !== String(req.params.id) && String(req.user._id) !== String(req.params.id)) {
+    throw new ApiError("Not authorized to change this password", 403);
+  }
+
   user.password = password;
   await user.save();
 
