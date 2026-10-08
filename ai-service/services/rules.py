@@ -2,50 +2,75 @@ def rule_check(text: str) -> dict | None:
     t = text.lower()
 
     if any(kw in t for kw in ["chest pain", "heart attack", "can't breathe", "cannot breathe", "breathing difficulty", "no pulse"]):
-        return {"condition": "Possible Cardiac / Respiratory Emergency", "severity": "Emergency",
-                "advice": "Call emergency services (112) immediately.", "department": "Emergency"}
+        return {
+            "condition": "Acute Cardiac / Severe Respiratory Distress",
+            "severity": "Emergency",
+            "urgency": "Immediate Emergency",
+            "causes": ["Myocardial ischemia/infarction", "Pulmonary embolism", "Severe bronchospasm"],
+            "guidance": "1. Sit upright in a comfortable resting position.\n2. Loosen tight clothing.\n3. Do not exert any physical effort.\n4. Have someone stay with you.",
+            "learnMore": "Chest discomfort radiating to jaw, left arm, or back with cold sweats is a medical red flag requiring emergency room triage.",
+            "seekDoctorUrgent": True,
+            "department": "Emergency Medicine"
+        }
 
     if any(kw in t for kw in ["stroke", "face drooping", "arm weakness", "slurred speech", "sudden numbness"]):
-        return {"condition": "Possible Stroke", "severity": "Emergency",
-                "advice": "Call 112 immediately. Note the time symptoms started.", "department": "Emergency"}
+        return {
+            "condition": "Suspected Cerebrovascular Event (Stroke)",
+            "severity": "Emergency",
+            "urgency": "Immediate Emergency",
+            "causes": ["Acute cerebral ischemia or intracranial hemorrhage"],
+            "guidance": "1. Note the exact time symptoms began.\n2. Do NOT administer aspirin or oral food/liquids.\n3. Keep the patient lying flat with head slightly elevated.",
+            "learnMore": "Remember F.A.S.T. (Face drooping, Arm weakness, Speech difficulty, Time to call emergency). Every minute saved preserves brain tissue.",
+            "seekDoctorUrgent": True,
+            "department": "Emergency / Neurology"
+        }
 
-    if any(kw in t for kw in ["unconscious", "unresponsive", "not breathing", "seizure", "overdose"]):
-        return {"condition": "Medical Emergency", "severity": "Emergency",
-                "advice": "Call 112 immediately.", "department": "Emergency"}
+    if any(kw in t for kw in ["burn", "scalding", "hot oil", "fire"]):
+        return {
+            "condition": "Thermal Burn / Scald Injury",
+            "severity": "Medium",
+            "urgency": "Within 24-48 Hours",
+            "causes": ["Thermal contact with heat source, hot liquid, or steam"],
+            "guidance": "1. Cool under gentle running room-temperature tap water for 10-20 minutes.\n2. Do NOT apply ice, toothpaste, butter, or oil.\n3. Cover loosely with clean, non-adherent sterile dressing.\n4. Do NOT pop intact blisters.",
+            "learnMore": "Burns larger than 3 inches, or on the face, hands, joints, or groin, require prompt in-person clinical assessment.",
+            "seekDoctorUrgent": False,
+            "department": "Dermatology / General Surgery"
+        }
+
+    if any(kw in t for kw in ["wound", "cut", "laceration", "bleeding", "knife cut", "glass cut"]):
+        return {
+            "condition": "Open Cut / Laceration Injury",
+            "severity": "Medium",
+            "urgency": "Today",
+            "causes": ["Mechanical trauma from sharp edge or impact"],
+            "guidance": "1. Apply firm direct pressure with clean cloth to arrest bleeding for 5-10 minutes.\n2. Rinse wound under clean water.\n3. Apply antiseptic and sterile bandage.",
+            "learnMore": "If the cut is deep (>0.5 cm), gaping, caused by rusted metal (needs Tetanus shot), or bleeding does not stop after 10 mins of pressure, visit urgent care immediately.",
+            "seekDoctorUrgent": True,
+            "department": "Emergency / General Surgery"
+        }
 
     if any(kw in t for kw in ["fever", "temperature", "chills", "sweating"]):
-        return {"condition": "Fever / Possible Infection", "severity": "Medium",
-                "advice": "Rest and stay hydrated. Take paracetamol for fever. See a doctor if it persists over 3 days or exceeds 103°F / 39.5°C.",
-                "department": "General Medicine"}
+        return {
+            "condition": "Fever & Pyrexia / Systemic Infection",
+            "severity": "Medium",
+            "urgency": "Within 24-48 Hours",
+            "causes": ["Viral upper respiratory infection", "Bacterial infection", "Systemic inflammatory response"],
+            "guidance": "1. Hydrate generously with oral fluids and electrolytes.\n2. Rest in a well-ventilated room.\n3. Take standard antipyretics (e.g. Paracetamol) as per OTC guidelines if needed.",
+            "learnMore": "Consult a doctor urgently if fever stays above 103°F (39.4°C), lasts more than 3 continuous days, or is accompanied by stiff neck, confusion, or rash.",
+            "seekDoctorUrgent": False,
+            "department": "General Medicine"
+        }
 
-    if any(kw in t for kw in ["cough", "cold", "runny nose", "sore throat", "sneezing"]):
-        return {"condition": "Upper Respiratory Infection / Common Cold", "severity": "Low",
-                "advice": "Rest, stay hydrated, and take over-the-counter cold medicine. See a doctor if symptoms worsen after 7 days.",
-                "department": "General Medicine"}
-
-    if any(kw in t for kw in ["headache", "migraine", "head pain"]):
-        return {"condition": "Headache / Migraine", "severity": "Low",
-                "advice": "Rest in a quiet dark room. Take paracetamol or ibuprofen. See a doctor if headache is sudden and severe.",
-                "department": "General Medicine"}
-
-    if any(kw in t for kw in ["stomach", "nausea", "vomiting", "diarrhea", "abdominal pain", "stomach ache"]):
-        return {"condition": "Gastrointestinal Distress", "severity": "Low",
-                "advice": "Stay hydrated with clear fluids. Avoid solid food for a few hours. See a doctor if symptoms persist over 48 hours.",
-                "department": "Gastroenterology"}
-
-    if any(kw in t for kw in ["rash", "itching", "hives", "skin"]):
-        return {"condition": "Skin Reaction / Possible Allergy", "severity": "Low",
-                "advice": "Avoid scratching. Apply calamine lotion if available. See a doctor if rash spreads or you have difficulty breathing.",
-                "department": "Dermatology"}
-
-    if any(kw in t for kw in ["back pain", "back ache", "lower back"]):
-        return {"condition": "Back Pain", "severity": "Low",
-                "advice": "Rest, apply a warm compress, and take ibuprofen if needed. See a doctor if pain radiates down your leg.",
-                "department": "Orthopedics"}
-
-    if any(kw in t for kw in ["anxiety", "panic", "stress", "depression", "mental"]):
-        return {"condition": "Mental Health Concern", "severity": "Medium",
-                "advice": "Practice deep breathing. Reach out to someone you trust. Please consult a mental health professional.",
-                "department": "Psychiatry"}
+    if any(kw in t for kw in ["rash", "itching", "hives", "skin allergy"]):
+        return {
+            "condition": "Acute Dermatitis / Urticaria",
+            "severity": "Low",
+            "urgency": "Routine",
+            "causes": ["Allergic contact, environmental irritant, or food/drug sensitivity"],
+            "guidance": "1. Avoid scratching or hot showers.\n2. Apply a cooling calamine lotion or mild moisturizer.\n3. Wear loose cotton garments.",
+            "learnMore": "If rash spreads rapidly or involves lip/eyelid swelling or breathing difficulty, seek emergency care for anaphylaxis immediately.",
+            "seekDoctorUrgent": False,
+            "department": "Dermatology"
+        }
 
     return None

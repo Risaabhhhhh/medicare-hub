@@ -788,21 +788,19 @@ function statusPill(s) {
   return m[s] || { bg:"rgba(176,164,162,0.1)", color:"#8A7E7C" };
 }
 
-/* ── FIX #8: Reusable AI response formatter ── */
-const formatAIResponse = (d) => `
-🧠 Condition: ${d?.condition || "Unknown"}
-⚠️ Severity: ${d?.severity || "Unknown"}
-💡 Advice: ${d?.advice || "No advice available"}
-🏥 Department: ${d?.department || "General"}
-`.trim();
+/* ── Structured AI response formatter & helper ── */
+const formatAIResponse = (d) => {
+  if (typeof d === "string") return d;
+  return d;
+};
 
-/* ── FIX #11: Severity-based message color ── */
 const severityColor = (severity) => {
-  if (!severity) return {};
+  if (!severity) return { border:"1px solid rgba(232,116,97,0.15)", background:"#fff" };
   const s = severity.toLowerCase();
-  if (s === "emergency")    return { border:"1px solid rgba(220,38,38,0.3)",  background:"rgba(220,38,38,0.04)"  };
-  if (s === "medium" || s === "moderate") return { border:"1px solid rgba(217,119,6,0.3)", background:"rgba(217,119,6,0.04)"  };
-  return { border:"1px solid rgba(232,116,97,0.12)", background:"#fafafa" };
+  if (s === "emergency") return { border:"1.5px solid rgba(220,38,38,0.4)", background:"rgba(220,38,38,0.03)" };
+  if (s === "high")      return { border:"1.5px solid rgba(234,88,12,0.4)", background:"rgba(234,88,12,0.03)" };
+  if (s === "medium" || s === "moderate") return { border:"1.5px solid rgba(217,119,6,0.35)", background:"rgba(217,119,6,0.03)" };
+  return { border:"1px solid rgba(46,125,50,0.3)", background:"rgba(46,125,50,0.02)" };
 };
 
 const BLOOD_GROUPS = ["A+","A-","B+","B-","AB+","AB-","O+","O-"];
@@ -987,61 +985,73 @@ export default function UserDashboard() {
 
   /* ── FIX #2: handleImageUpload declared BEFORE renderAI ── */
   /* ── FIX #3: Safe API response with optional chaining    ── */
-  /* ── FIX #7: Improved error handling                     ── */
-  /* ── FIX #13: File type validation                        ── */
-  const handleImageUpload = async () => {
-    if (!image) return alert("Select an image first");
+  /* ── Medical AI: Image & Symptom Triage ── */
+  const handleImageUpload = async (fileToUpload) => {
+    const targetFile = fileToUpload || image;
+    if (!targetFile) return alert("Select an image first");
 
-    // FIX #13: validate file type
-    if (!image.type.startsWith("image/")) {
+    if (!targetFile.type.startsWith("image/")) {
       return alert("Please upload a valid image file");
     }
 
-    // FIX #5: Show user message in chat when uploading
+    const previewUrl = URL.createObjectURL(targetFile);
+
+    // Show user message with thumbnail preview in chat
     setAiMsgs(prev => [
       ...prev,
-      { role: "user", text: "📸 Uploaded image for analysis" }
+      {
+        role: "user",
+        text: "Uploaded clinical image for triage & guidance",
+        imageUrl: previewUrl
+      }
     ]);
 
-    // FIX #6: Show analyzing indicator in chat
+    // Show analyzing indicator in chat
     setAiMsgs(prev => [
       ...prev,
-      { role: "assistant", text: "🔍 Analyzing your image…", isLoading: true }
+      { role: "assistant", text: "🔍 Analyzing wound/medical image with MedGamma Vision…", isLoading: true }
     ]);
 
     const formData = new FormData();
-    formData.append("file", image);
+    formData.append("file", targetFile);
     setImageLoading(true);
 
     try {
-      // Do NOT set Content-Type manually — Axios sets it automatically with the correct boundary
       const res = await api.post("/ai/image", formData);
-
-      // FIX #3: safe access with fallbacks
       const d = res?.data || {};
-      const formatted = formatAIResponse(d);
 
-      // Replace the "Analyzing..." placeholder with the real result
+      // Replace placeholder with structured response
       setAiMsgs(prev => [
         ...prev.filter(m => !m.isLoading),
-        { role: "assistant", text: formatted, severity: d?.severity }
+        {
+          role: "assistant",
+          data: d,
+          text: d.guidance || d.advice || "Assessment completed",
+          severity: d?.severity,
+          urgency: d?.urgency,
+          seekDoctorUrgent: d?.seekDoctorUrgent,
+          causes: d?.causes,
+          learnMore: d?.learnMore,
+          condition: d?.condition,
+          department: d?.department
+        }
       ]);
 
-      // Emergency alert
-      if (d?.severity?.toLowerCase() === "emergency") {
-        alert("🚨 Emergency detected! Call 108 immediately!");
+      if (d?.severity?.toLowerCase() === "emergency" || d?.seekDoctorUrgent) {
+        // Soft prompt or alert for emergency
+        if (d?.severity?.toLowerCase() === "emergency") {
+          alert("🚨 High severity condition detected! Please seek medical emergency care or call 108/112.");
+        }
       }
-
     } catch (err) {
-      // FIX #7: detailed error message
       console.error(err);
       setAiMsgs(prev => [
         ...prev.filter(m => !m.isLoading),
-        { role: "assistant", text: "❌ Image analysis failed. Please try again." }
+        { role: "assistant", text: "❌ Image triage service failed. Please check network and try again." }
       ]);
-      alert(err.response?.data?.message || "Image AI failed. Please try again.");
     } finally {
       setImageLoading(false);
+      setImage(null);
     }
   };
 
@@ -1055,14 +1065,22 @@ export default function UserDashboard() {
 
     try {
       const res = await api.post("/ai/symptoms", { text: msg });
-
-      // FIX #3: safe access with fallbacks
       const d = res?.data || {};
-      const formatted = formatAIResponse(d);
 
       setAiMsgs(prev => [
         ...prev,
-        { role: "assistant", text: formatted, severity: d?.severity }
+        {
+          role: "assistant",
+          data: d,
+          text: d.guidance || d.advice || "Guidance generated",
+          severity: d?.severity,
+          urgency: d?.urgency,
+          seekDoctorUrgent: d?.seekDoctorUrgent,
+          causes: d?.causes,
+          learnMore: d?.learnMore,
+          condition: d?.condition,
+          department: d?.department
+        }
       ]);
     } catch (err) {
       console.error(err);
@@ -1357,87 +1375,242 @@ export default function UserDashboard() {
     </Fade>
   );
 
-  /* ── renderAI: uses handleImageUpload declared above ── */
+  /* ── renderAI: Clinical Triage & Wound Guidance Chat ── */
   const renderAI = () => (
     <Fade>
       <div style={{ height: "calc(100vh - 130px)", display: "flex", flexDirection: "column" }}>
 
         {/* HEADER */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 12,
-            background: "linear-gradient(135deg,#7c3aed,#6366f1)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "1rem", color: "#fff"
-          }}>✦</div>
-          <div>
-            <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 22, color: "#1C1C1E" }}>
-              MedGamma AI
-            </div>
-            <div style={{ fontSize: 12, color: "#B0A4A2" }}>Symptom checker & health guidance</div>
-          </div>
-          <span style={{
-            marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#C0392B",
-            background: "rgba(192,57,43,0.07)", padding: "4px 12px", borderRadius: 20
-          }}>● Online</span>
-        </div>
-
-        {/* CHAT BOX */}
-        <div ref={aiRef} style={{
-          flex: 1, overflowY: "auto", background: "#fff", borderRadius: 16,
-          padding: "16px 20px", marginBottom: 14,
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 14,
+          background: "#fff",
+          padding: "14px 18px",
+          borderRadius: 14,
           border: "1px solid rgba(232,116,97,0.15)",
           boxShadow: "0 2px 10px rgba(192,57,43,0.04)"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 10,
+              background: "linear-gradient(135deg,#C0392B,#7c3aed)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "1.1rem", color: "#fff"
+            }}>🩺</div>
+            <div>
+              <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 22, color: "#1C1C1E", lineHeight: 1.1 }}>
+                MedGamma Clinical AI Triage
+              </div>
+              <div style={{ fontSize: 11.5, color: "#8A7E7C" }}>
+                Educational symptom & wound analyzer • Severity & Doctor Visit Assessment
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, color: "#2E7D32",
+              background: "rgba(46,125,50,0.08)", padding: "4px 10px", borderRadius: 20,
+              border: "1px solid rgba(46,125,50,0.2)"
+            }}>● Microservice Active</span>
+          </div>
+        </div>
+
+        {/* CHAT MESSAGES BOX */}
+        <div ref={aiRef} style={{
+          flex: 1, overflowY: "auto", background: "#fff", borderRadius: 16,
+          padding: "18px 20px", marginBottom: 12,
+          border: "1px solid rgba(232,116,97,0.15)",
+          boxShadow: "0 2px 12px rgba(192,57,43,0.03)",
+          display: "flex", flexDirection: "column", gap: 14
         }}>
           {aiMsgs.map((m, i) => (
             <div key={i} style={{
               display: "flex",
               justifyContent: m.role === "user" ? "flex-end" : "flex-start",
-              marginBottom: 14
+              width: "100%"
             }}>
               {m.role === "assistant" && (
                 <div style={{
-                  width: 28, height: 28, borderRadius: 8,
-                  background: "linear-gradient(135deg,#7c3aed,#6366f1)",
+                  width: 30, height: 30, borderRadius: 8,
+                  background: "linear-gradient(135deg,#7c3aed,#C0392B)",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "0.75rem", color: "#fff", marginRight: 10, marginTop: 2, flexShrink: 0
+                  fontSize: "0.8rem", color: "#fff", marginRight: 10, marginTop: 4, flexShrink: 0
                 }}>✦</div>
               )}
-              {/* FIX #11: severity-based background color for assistant messages */}
+
+              {/* Message Bubble */}
               <div style={{
-                maxWidth: "70%",
-                padding: "11px 15px",
-                borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-                background: m.role === "user" ? "#C0392B" : "#fafafa",
+                maxWidth: m.role === "user" ? "75%" : "82%",
+                padding: m.role === "user" ? "10px 15px" : "14px 16px",
+                borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                background: m.role === "user" ? "#C0392B" : "#FAFAFA",
                 color: m.role === "user" ? "#fff" : "#1C1C1E",
                 fontSize: 13,
-                lineHeight: 1.7,
-                whiteSpace: "pre-wrap",
-                ...(m.role === "assistant" ? severityColor(m.severity) : {})
+                lineHeight: 1.6,
+                ...(m.role === "assistant" ? severityColor(m.severity) : {}),
+                boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
               }}>
-                {m.role === "assistant" && (
-                  <span style={{
-                    fontSize: 10, color: "#7c3aed", fontWeight: 700,
-                    display: "block", marginBottom: 4
-                  }}>MedGamma</span>
-                )}
-                {/* Show pulse dots for the loading placeholder */}
-                {m.isLoading ? (
-                  <div style={{ display: "flex", gap: 5, alignItems: "center", padding: "2px 0" }}>
-                    {[0,1,2].map(idx => (
-                      <div key={idx} style={{
-                        width: 6, height: 6, borderRadius: "50%", background: "#7c3aed",
-                        animation: `mhDot 1.2s ${idx * 0.2}s ease infinite`
-                      }}/>
-                    ))}
+                {/* User Message with optional uploaded image preview */}
+                {m.role === "user" && (
+                  <div>
+                    {m.imageUrl && (
+                      <div style={{ marginBottom: 8 }}>
+                        <img
+                          src={m.imageUrl}
+                          alt="Uploaded wound/skin"
+                          style={{ maxWidth: 220, maxHeight: 180, borderRadius: 10, border: "2px solid rgba(255,255,255,0.4)", objectFit: "cover" }}
+                        />
+                      </div>
+                    )}
+                    <div>{m.text}</div>
                   </div>
-                ) : m.text}
+                )}
+
+                {/* Assistant Message */}
+                {m.role === "assistant" && (
+                  <div>
+                    {/* Header Label & Severity Badges */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6, marginBottom: 8, borderBottom: m.data ? "1px solid rgba(232,116,97,0.12)" : "none", paddingBottom: m.data ? 6 : 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: "#7c3aed", fontWeight: 700 }}>MedGamma Clinical Assistant</span>
+                        {m.department && (
+                          <span style={{ fontSize: 10, color: "#8A7E7C", background: "rgba(0,0,0,0.05)", padding: "1px 6px", borderRadius: 4 }}>
+                            {m.department}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Severity & Urgency Pills */}
+                      {m.severity && (
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700,
+                            padding: "2px 8px", borderRadius: 12,
+                            background: m.severity.toLowerCase() === "emergency" ? "#DC2626" : (m.severity.toLowerCase() === "high" ? "#EA580C" : (m.severity.toLowerCase() === "medium" ? "#D97706" : "#2E7D32")),
+                            color: "#fff"
+                          }}>
+                            Severity: {m.severity}
+                          </span>
+                          {m.urgency && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 600,
+                              padding: "2px 8px", borderRadius: 12,
+                              background: "rgba(0,0,0,0.06)", color: "#1C1C1E"
+                            }}>
+                              ⏱️ {m.urgency}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Loading State */}
+                    {m.isLoading ? (
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", padding: "6px 0", color: "#7c3aed", fontSize: 12.5 }}>
+                        <div style={{ width: 16, height: 16, border: "2px solid #7c3aed", borderTopColor: "transparent", borderRadius: "50%", animation: "mhSpin 0.8s linear infinite" }}/>
+                        <span>{m.text}</span>
+                      </div>
+                    ) : (
+                      <div>
+                        {/* If structured assessment returned */}
+                        {m.data ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {/* Condition Name */}
+                            {m.condition && (
+                              <div style={{ fontSize: 14, fontWeight: 700, color: "#1C1C1E" }}>
+                                📋 Assessment: <span style={{ color: "#C0392B" }}>{m.condition}</span>
+                              </div>
+                            )}
+
+                            {/* Doctor Urgency Alert Banner */}
+                            <div style={{
+                              padding: "8px 12px",
+                              borderRadius: 8,
+                              background: m.seekDoctorUrgent || m.severity?.toLowerCase() === "emergency" ? "rgba(220,38,38,0.08)" : "rgba(46,125,50,0.08)",
+                              border: `1px solid ${m.seekDoctorUrgent || m.severity?.toLowerCase() === "emergency" ? "rgba(220,38,38,0.25)" : "rgba(46,125,50,0.25)"}`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 8
+                            }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: m.seekDoctorUrgent || m.severity?.toLowerCase() === "emergency" ? "#DC2626" : "#2E7D32" }}>
+                                <span>{m.seekDoctorUrgent || m.severity?.toLowerCase() === "emergency" ? "🚨 In-Person Doctor Visit Recommended" : "✅ Home Management Safe (Monitor condition)"}</span>
+                              </div>
+                              <button
+                                onClick={() => setTab("map")}
+                                style={{
+                                  padding: "4px 10px",
+                                  background: m.seekDoctorUrgent ? "#DC2626" : "#2E7D32",
+                                  color: "#fff",
+                                  border: "none",
+                                  borderRadius: 6,
+                                  fontSize: 10.5,
+                                  fontWeight: 700,
+                                  cursor: "pointer"
+                                }}
+                              >
+                                Find Hospital →
+                              </button>
+                            </div>
+
+                            {/* Likely Causes */}
+                            {m.causes && m.causes.length > 0 && (
+                              <div style={{ background: "rgba(0,0,0,0.02)", padding: "8px 12px", borderRadius: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#8A7E7C", textTransform: "uppercase", marginBottom: 3 }}>
+                                  🔍 Possible Causes & Factors:
+                                </div>
+                                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#374151" }}>
+                                  {m.causes.map((c, idx) => (
+                                    <li key={idx}>{c}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Home Care / First-Aid Guidance */}
+                            {m.text && (
+                              <div style={{ background: "rgba(192,57,43,0.03)", padding: "9px 12px", borderRadius: 8, borderLeft: "3px solid #C0392B" }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#C0392B", textTransform: "uppercase", marginBottom: 3 }}>
+                                  💡 First-Aid & Care Guidance:
+                                </div>
+                                <div style={{ fontSize: 12.5, whiteSpace: "pre-line", color: "#1F2937" }}>
+                                  {m.text}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Learn More / Warning Signs to Monitor */}
+                            {m.learnMore && (
+                              <div style={{ background: "rgba(234,88,12,0.04)", padding: "8px 12px", borderRadius: 8, borderLeft: "3px solid #EA580C" }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#C2410C", textTransform: "uppercase", marginBottom: 2 }}>
+                                  ⚠️ Signs to Watch Out For:
+                                </div>
+                                <div style={{ fontSize: 12, color: "#4B5563" }}>
+                                  {m.learnMore}
+                                </div>
+                              </div>
+                            )}
+
+                            <div style={{ fontSize: 10, color: "#9CA3AF", fontStyle: "italic", marginTop: 2 }}>
+                              ⚠️ Disclaimer: Educational guidance only. Always consult a licensed healthcare professional for official diagnosis and prescriptions.
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ whiteSpace: "pre-line" }}>{m.text}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
 
           {aiLoad && (
-            <div style={{ display: "flex", gap: 5 }}>
+            <div style={{ display: "flex", gap: 5, padding: "8px 0" }}>
               {[0,1,2].map(i => (
                 <div key={i} style={{
                   width: 7, height: 7, borderRadius: "50%", background: "#C0392B",
@@ -1448,65 +1621,100 @@ export default function UserDashboard() {
           )}
         </div>
 
-        {/* TEXT INPUT */}
-        {/* FIX #4: Shift+Enter for newline, Enter alone sends */}
-        <div style={{ display: "flex", gap: 10 }}>
-          <input
-            value={aiInput}
-            onChange={(e) => setAiInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendAI();
-              }
-            }}
-            placeholder="Describe your symptoms… (Enter to send, Shift+Enter for newline)"
-            className="mh-input"
-            style={{ flex: 1, padding: "12px 16px", borderRadius: 12 }}
-          />
-          <BtnPrimary onClick={sendAI} disabled={aiLoad || !aiInput.trim()}>
-            Send →
-          </BtnPrimary>
-        </div>
-
-        {/* IMAGE AI SECTION */}
+        {/* INPUT & PHOTO EVIDENCE UPLOAD BAR */}
         <div style={{
-          marginTop: 12, background: "#fff", padding: "12px 14px",
-          borderRadius: 12, border: "1px solid rgba(232,116,97,0.15)"
+          background: "#fff",
+          padding: "12px 14px",
+          borderRadius: 14,
+          border: "1px solid rgba(232,116,97,0.15)",
+          boxShadow: "0 2px 10px rgba(192,57,43,0.04)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 10
         }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#1C1C1E", marginBottom: 8 }}>
-            📸 Analyze Medical Image
+          {/* Quick Symptoms / Wound Suggestions */}
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+            <span style={{ fontSize: 11, color: "#8A7E7C", fontWeight: 600, alignSelf: "center", flexShrink: 0 }}>Quick Triage:</span>
+            {[
+              "🩹 Burn injury guidance",
+              "🩸 Cut / Laceration first-aid",
+              "🔴 Skin rash & swelling",
+              "🌡️ Persistent high fever",
+              "🫀 Chest tightness"
+            ].map(prompt => (
+              <button
+                key={prompt}
+                onClick={() => { setAiInput(prompt.replace(/^[^\s]+\s/, "")); }}
+                style={{
+                  padding: "3px 9px",
+                  background: "#FDF2F0",
+                  border: "1px solid rgba(232,116,97,0.18)",
+                  borderRadius: 14,
+                  fontSize: 11,
+                  color: "#1C1C1E",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0
+                }}
+              >
+                {prompt}
+              </button>
+            ))}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setImage(e.target.files[0])}
-              style={{ fontSize: 12, color: "#8A7E7C", flex: 1, minWidth: 0 }}
-            />
-            {/* FIX #5: Show selected file name as preview indicator */}
-            {image && (
-              <span style={{
-                fontSize: 11, color: "#7c3aed", background: "rgba(124,58,237,0.07)",
-                padding: "3px 10px", borderRadius: 20, fontWeight: 600, flexShrink: 0
-              }}>
-                ✓ {image.name?.length > 20 ? image.name.slice(0,20) + "…" : image.name}
-              </span>
-            )}
-            <button
-              onClick={handleImageUpload}
-              disabled={imageLoading || !image}
+
+          {/* Text Input Row + Image Trigger */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {/* File Upload Button for wound/evidence */}
+            <label
               style={{
-                background: imageLoading ? "#8A7E7C" : "#1A5276",
-                color: "#fff", border: "none", padding: "8px 16px",
-                borderRadius: 8, cursor: imageLoading || !image ? "not-allowed" : "pointer",
-                fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans',sans-serif",
-                transition: "background .15s", flexShrink: 0,
-                opacity: !image ? 0.6 : 1
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "9px 12px",
+                background: "rgba(124,58,237,0.08)",
+                color: "#7c3aed",
+                border: "1px solid rgba(124,58,237,0.25)",
+                borderRadius: 10,
+                cursor: imageLoading ? "wait" : "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+                transition: "all 0.15s"
               }}
+              title="Upload photo of wound, cut, burn or rash"
             >
-              {imageLoading ? "Analyzing…" : "Upload & Analyze"}
-            </button>
+              <span>📷</span>
+              <span>{imageLoading ? "Scanning…" : "Add Wound Photo"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleImageUpload(e.target.files[0]);
+                  }
+                }}
+                style={{ display: "none" }}
+              />
+            </label>
+
+            {/* Text Input */}
+            <input
+              value={aiInput}
+              onChange={(e) => setAiInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendAI();
+                }
+              }}
+              placeholder="Describe what happened, symptoms, pain level, or wound details…"
+              className="mh-input"
+              style={{ flex: 1, padding: "10px 14px", borderRadius: 10, fontSize: 13 }}
+            />
+
+            <BtnPrimary onClick={sendAI} disabled={aiLoad || !aiInput.trim()} style={{ padding: "9px 18px", borderRadius: 10 }}>
+              Send →
+            </BtnPrimary>
           </div>
         </div>
       </div>
